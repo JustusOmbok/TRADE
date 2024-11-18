@@ -22,7 +22,7 @@ def main_trading_loop():
             time.sleep(900)  # Sleep for 15 minutes
             continue
         bot.wait_for_next_execution()
-        df = bot.fetch_latest_data(symbol=symbol, timeframe=timeframe, num_bars=500)
+        df = bot.fetch_latest_data(symbol, timeframe, 500)
         df = bot.create_features(df)
         df.set_index('time', inplace=True)
         X_latestA = df.drop(columns=['tick_volume', 'real_volume', 'volume', 'spread', 'high', 'open', 'close', 'low']).select_dtypes(include=[np.number]).values[-1].reshape(1, -1)
