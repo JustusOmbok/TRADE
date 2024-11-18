@@ -11,18 +11,18 @@ from gold_script import TradingBot
 def main_trading_loop():
     symbol = "XAUUSD"
     timeframe = mt5.TIMEFRAME_M15
-    bot = TradingBot()
+    bot = TradingBot(symbol='XAUUSD', timeframe=mt5.TIMEFRAME_M15)
     modelA, scalerA = bot.load_modelA_and_scalerA()
 
     while True:
         order_id = None  # Initialize order_id to None
 
-        if bot.has_active_trade(symbol):
+        if bot.has_active_trade():
             print("An active trade is already open. Waiting for 15 minutes...")
             time.sleep(900)  # Sleep for 15 minutes
             continue
         bot.wait_for_next_execution()
-        df = bot.fetch_latest_data(symbol, timeframe, num_bars=500)
+        df = bot.fetch_latest_data(symbol=symbol, timeframe=timeframe, num_bars=500)
         df = bot.create_features(df)
         df.set_index('time', inplace=True)
         X_latestA = df.drop(columns=['tick_volume', 'real_volume', 'volume', 'spread', 'high', 'open', 'close', 'low']).select_dtypes(include=[np.number]).values[-1].reshape(1, -1)
@@ -67,7 +67,7 @@ def main_trading_loop():
         if order_id:
             while True:
                 # Check if the trade has ended
-                if not bot.has_active_trade(symbol):
+                if not bot.has_active_trade():
                     print(f"Trade with Order ID {order_id} has ended.")
                     bot.wait_for_next_execution()
                     break  # Exit the inner loop if all trades have ended
