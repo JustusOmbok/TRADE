@@ -54,12 +54,69 @@ def create_features(df):
     # Heikin-Ashi Candlesticks
     df['ha_open'], df['ha_high'], df['ha_low'], df['ha_close'] = compute_heikin_ashi(df)
 
+    df['fisher_transform'] = compute_fisher_transform(df['close'])
+    df['vwap'] = compute_vwap(df['close'], df['volume'])
+    df['eri_bull_power'], df['eri_bear_power'] = compute_eri(df['high'], df['low'], df['close'])
+    df['cmo'] = compute_cmo(df['close'])
+    df['kvo'] = compute_kvo(df['close'], df['high'], df['low'], df['volume'])
+    df['dpo'] = compute_dpo(df['close'])
+    df['mfi_divergence'] = detect_mfi_divergence(df['close'], df['MFI'])
+
     # Define multi-class target variable
     df['target'] = np.where((df['close'].shift(2) < df['close'].shift(1)) & (df['close'] > df['close'].shift(1)), 1,
                             np.where((df['close'].shift(2) > df['close'].shift(1)) & (df['close'] < df['close'].shift(1)), 2,
                                      0))  # No favorable trade
     df.dropna(inplace=True)
     return df
+
+# Helper functions for feature creation
+def compute_dpo(close, period=20):
+    sma = close.shift(int((period / 2) + 1)).rolling(window=period).mean()
+    dpo = close - sma
+    return dpo
+def compute_kvo(close, high, low, volume, short_period=34, long_period=55):
+    trend = ((high + low + close) / 3) - ((high.shift(1) + low.shift(1) + close.shift(1)) / 3)
+    volume_force = trend * volume
+    short_kvo = volume_force.ewm(span=short_period, adjust=False).mean()
+    long_kvo = volume_force.ewm(span=long_period, adjust=False).mean()
+    kvo = short_kvo - long_kvo
+    return kvo
+def detect_mfi_divergence(close, mfi, lookback=5):
+    price_highs = close.rolling(window=lookback).max()
+    price_lows = close.rolling(window=lookback).min()
+    mfi_highs = mfi.rolling(window=lookback).max()
+    mfi_lows = mfi.rolling(window=lookback).min()
+    divergence = np.where((close > price_highs.shift(1)) & (mfi < mfi_highs.shift(1)), 1,
+                          np.where((close < price_lows.shift(1)) & (mfi > mfi_lows.shift(1)), -1, 0))
+    return pd.Series(divergence, index=close.index)
+
+def compute_cmo(close, period=14):
+    delta = close.diff()
+    gain = delta.where(delta > 0, 0).rolling(window=period).sum()
+    loss = -delta.where(delta < 0, 0).rolling(window=period).sum()
+    cmo = 100 * (gain - loss) / (gain + loss)
+    return cmo
+
+def compute_fisher_transform(close, period=10):
+    min_low = close.rolling(window=period).min()
+    max_high = close.rolling(window=period).max()
+    epsilon = 1e-10  # Small value to avoid division by zero
+    value = 2 * ((close - min_low) / (max_high - min_low + epsilon) - 0.5)
+    value = np.clip(value, -0.999, 0.999)  # Clip values to avoid log of zero
+    fisher_transform = (np.log((1 + value) / (1 - value + epsilon))).rolling(window=2).mean()
+    return fisher_transform
+
+def compute_vwap(close, volume):
+    cum_volume_price = (close * volume).cumsum()
+    cum_volume = volume.cumsum()
+    vwap = cum_volume_price / cum_volume
+    return vwap
+
+def compute_eri(high, low, close, ema_window=13):
+    ema = close.ewm(span=ema_window, adjust=False).mean()
+    bull_power = high - ema
+    bear_power = low - ema
+    return bull_power, bear_power
 
 def compute_keltner_channels(close, high, low, ema_window=20, atr_window=10, atr_multiplier=2):
     ema = close.ewm(span=ema_window, adjust=False).mean()
