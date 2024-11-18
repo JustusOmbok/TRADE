@@ -11,7 +11,7 @@ __pycache__
 *.pylance
 
 # Ignore template directory
-template
+template/
 
 # Ignore .vscode directory
 .vscode
