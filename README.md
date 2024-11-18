@@ -26,7 +26,7 @@ To use the model, follow these steps:
     ```
 3. Run the model:
     ```bash
-    python gold_script.py
+    python main.py
     ```
 
 ## Contributing
