@@ -15,8 +15,3 @@ template/
 
 # Ignore .vscode directory
 .vscode
-
-# Ignore TA_Lib-0.4.28-cp311-cp311-win_amd64.whl file
-TA_Lib-0.4.28-cp311-cp311-win_amd64.whl
-
-
