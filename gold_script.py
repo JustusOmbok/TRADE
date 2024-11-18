@@ -7,6 +7,107 @@ import time
 import pickle
 import datetime
 
+class TradingBot:
+    def __init__(self, symbol, timeframe, num_bars=500):
+        self.symbol = symbol
+        self.timeframe = timeframe
+        self.num_bars = num_bars
+        self.modelA, self.scalerA = self.load_modelA_and_scalerA()
+
+    def fetch_latest_data(self):
+        rates = mt5.copy_rates_from_pos(self.symbol, self.timeframe, 0, self.num_bars)
+        if rates is None or len(rates) == 0:
+            print(f"Failed to fetch data for {self.symbol}. Rates are None or empty.")
+            return None
+        df = pd.DataFrame(rates)
+        if 'time' in df.columns:
+            df['time'] = pd.to_datetime(df['time'], unit='s')
+        if 'tick_volume' in df.columns:
+            df['volume'] = df['tick_volume']
+        elif 'real_volume' in df.columns:
+            df['volume'] = df['real_volume']
+        else:
+            print("Volume not found")
+        return df
+
+    def create_features(self, df):
+        df['RSI'] = compute_rsi(df['close'], window=14)
+        df['ATR'] = compute_atr(df['high'], df['low'], df['close'], window=14)
+        df['rolling_std'] = df['close'].rolling(window=20).std()
+        df['slowk'], df['slowd'] = compute_stochastic(df['high'], df['low'], df['close'])
+        df['ROC'] = df['close'].pct_change(periods=12)
+        df['CCI'] = compute_cci(df['high'], df['low'], df['close'], window=20)
+        df['Williams_%R'] = compute_williams_r(df['high'], df['low'], df['close'], window=14)
+        df['MFI'] = compute_mfi(df['high'], df['low'], df['close'], df['volume'], window=14)
+        df['keltner_upper'], df['keltner_lower'] = compute_keltner_channels(df['close'], df['high'], df['low'])
+        df['price_rsi_divergence'] = detect_divergence(df['close'], df['RSI'], lookback=5)
+        df['ha_open'], df['ha_high'], df['ha_low'], df['ha_close'] = compute_heikin_ashi(df)
+        df.dropna(inplace=True)
+        return df
+
+    def place_buy_trade(self, entry_price, stop_loss, take_profit, lotSize):
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": self.symbol,
+            "volume": lotSize,
+            "type": mt5.ORDER_TYPE_BUY,
+            "price": entry_price,
+            "sl": stop_loss,
+            "tp": take_profit,
+            "deviation": 20,
+            "magic": 234000,
+            "comment": "Buy trade TP1",
+            "type_time": mt5.ORDER_TIME_GTC,
+            "type_filling": mt5.ORDER_FILLING_IOC,
+        }
+        result = mt5.order_send(request)
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            print(f"Failed to place buy order: {result.comment}")
+            return None
+        return [result.order]
+
+    def place_sell_trade(self, entry_price, stop_loss, take_profit, lotSize):
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": self.symbol,
+            "volume": lotSize,
+            "type": mt5.ORDER_TYPE_SELL,
+            "price": entry_price,
+            "sl": stop_loss,
+            "tp": take_profit,
+            "deviation": 20,
+            "magic": 234000,
+            "comment": "Sell trade TP1",
+            "type_time": mt5.ORDER_TIME_GTC,
+            "type_filling": mt5.ORDER_FILLING_IOC,
+        }
+        result = mt5.order_send(request)
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            print(f"Failed to place sell order: {result.comment}")
+            return None
+        return [result.order]
+
+    def load_modelA_and_scalerA(self):
+        modelA = keras.models.load_model('GRU_xauusd_model.keras')
+        with open('GRU_class_scaler.pkl', 'rb') as f:
+            scalerA = pickle.load(f)
+        return modelA, scalerA
+
+    def has_active_trade(self):
+        positions = mt5.positions_get(symbol=self.symbol)
+        return len(positions) > 0
+
+    def wait_for_next_execution(self):
+        while True:
+            now = datetime.datetime.now()
+            minute = now.minute
+            second = now.second
+            if (8 <= now.hour < 19) and (minute in [0, 15, 30, 45]) and (second in range(21)):
+                print(f"Starting the next trading cycle at {now.strftime('%H:%M:%S')} UTC")
+                break
+            else:
+                time.sleep(10)
+
 # Helper functions for indicators
 
 def compute_keltner_channels(close, high, low, ema_window=20, atr_window=10, atr_multiplier=2):
@@ -79,198 +180,3 @@ def compute_mfi(high, low, close, volume, window=14):
     negative_flow_sum = negative_flow.rolling(window=window).sum()
     money_flow_index = 100 - (100 / (1 + (positive_flow_sum / negative_flow_sum)))
     return money_flow_index
-
-# Function to fetch latest data from MetaTrader5
-def fetch_latest_data(symbol, timeframe, num_bars=500):
-    rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, num_bars)
-    if rates is None or len(rates) == 0:
-        print(f"Failed to fetch data for {symbol}. Rates are None or empty.")
-        return None  # Explicitly return None if there's an issue
-    df = pd.DataFrame(rates)
-    if 'time' in df.columns:
-        df['time'] = pd.to_datetime(df['time'], unit='s')
-
-    # Ensure volume is in the DataFrame
-    if 'tick_volume' in df.columns:
-        df['volume'] = df['tick_volume']
-    elif 'real_volume' in df.columns:
-        df['volume'] = df['real_volume']
-    else:
-        print("Volume not found")  # Default if volume is not available
-
-    return df
-
-# Main feature creation function with all updates
-def create_features(df):
-    # Existing indicators
-    df['RSI'] = compute_rsi(df['close'], window=14)
-    df['ATR'] = compute_atr(df['high'], df['low'], df['close'], window=14)
-    df['rolling_std'] = df['close'].rolling(window=20).std()
-    df['slowk'], df['slowd'] = compute_stochastic(df['high'], df['low'], df['close'])
-    df['ROC'] = df['close'].pct_change(periods=12)
-    df['CCI'] = compute_cci(df['high'], df['low'], df['close'], window=20)
-    df['Williams_%R'] = compute_williams_r(df['high'], df['low'], df['close'], window=14)
-    df['MFI'] = compute_mfi(df['high'], df['low'], df['close'], df['volume'], window=14)
-    
-    # New indicators
-    # Keltner Channels
-    df['keltner_upper'], df['keltner_lower'] = compute_keltner_channels(df['close'], df['high'], df['low'])
-
-    # Divergence Detection (between Price and RSI)
-    df['price_rsi_divergence'] = detect_divergence(df['close'], df['RSI'], lookback=5)
-
-    # Heikin-Ashi Candlesticks
-    df['ha_open'], df['ha_high'], df['ha_low'], df['ha_close'] = compute_heikin_ashi(df)
-
-    df.dropna(inplace=True)
-    return df
-
-# Place a buy trade
-def place_buy_trade(symbol, entry_price, stop_loss, take_profit, lotSize):
-
-    # Place the initial buy order with the first take profit level
-    request = {
-        "action": mt5.TRADE_ACTION_DEAL,
-        "symbol": symbol,
-        "volume": lotSize,  # Divide the lot size into three parts
-        "type": mt5.ORDER_TYPE_BUY,
-        "price": entry_price,
-        "sl": stop_loss,
-        "tp": take_profit,
-        "deviation": 20,
-        "magic": 234000,
-        "comment": "Buy trade TP1",
-        "type_time": mt5.ORDER_TIME_GTC,
-        "type_filling": mt5.ORDER_FILLING_IOC,
-    }
-    result = mt5.order_send(request)
-    if result.retcode != mt5.TRADE_RETCODE_DONE:
-        print(f"Failed to place buy order: {result.comment}")
-        return None
-
-    return [result.order]
-
-# Place a sell trade
-def place_sell_trade(symbol, entry_price, stop_loss, take_profit, lotSize):
-
-    # Place the initial sell order with the first take profit level
-    request = {
-        "action": mt5.TRADE_ACTION_DEAL,
-        "symbol": symbol,
-        "volume": lotSize,  # Divide the lot size into three parts
-        "type": mt5.ORDER_TYPE_SELL,
-        "price": entry_price,
-        "sl": stop_loss,
-        "tp": take_profit,
-        "deviation": 20,
-        "magic": 234000,
-        "comment": "Sell trade TP1",
-        "type_time": mt5.ORDER_TIME_GTC,
-        "type_filling": mt5.ORDER_FILLING_IOC,
-    }
-    result = mt5.order_send(request)
-    if result.retcode != mt5.TRADE_RETCODE_DONE:
-        print(f"Failed to place sell order: {result.comment}")
-        return None
-
-    return [result.order]
-
-def load_modelA_and_scalerA():
-    modelA = keras.models.load_model('GRU_xauusd_model.keras')
-    with open('GRU_class_scaler.pkl', 'rb') as f:
-        scalerA = pickle.load(f)
-    # print(f"Scaler was fitted on features: {scaler.mean_}")  # Inspect the scaler's fitted features
-    return modelA, scalerA
-
-# Check if any active trades are open
-def has_active_trade(symbol):
-    positions = mt5.positions_get(symbol=symbol)
-    return len(positions) > 0
-
-def wait_for_next_execution():
-    while True:
-        now = datetime.datetime.now()
-        minute = now.minute
-        second = now.second
-
-        # Check if the time is one of the desired minute marks (00:01, 15:01, 30:01, 45:01)
-        if (8 <= now.hour < 19) and (minute == 0 or minute == 15 or minute == 30 or minute == 45) and (second in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]):
-            print(f"Starting the next trading cycle at {now.strftime('%H:%M:%S')} UTC")
-            break
-        else:
-            # Sleep for 10 seconds before checking the time again
-            time.sleep(10)
-
-# Main trading function
-def main_trading_loop():
-    symbol = "XAUUSD"
-    timeframe = mt5.TIMEFRAME_M15
-    modelA, scalerA = load_modelA_and_scalerA()
-
-    while True:
-        order_id = None  # Initialize order_id to None
-
-        if has_active_trade(symbol):
-            print("An active trade is already open. Waiting for 15 minutes...")
-            time.sleep(900)  # Sleep for 15 minutes
-            continue
-        wait_for_next_execution()
-        df = fetch_latest_data(symbol, timeframe, num_bars=500)
-        df = create_features(df)
-        df.set_index('time', inplace=True)
-        X_latestA = df.drop(columns=['tick_volume', 'real_volume', 'volume', 'spread', 'high', 'open', 'close', 'low']).select_dtypes(include=[np.number]).values[-1].reshape(1, -1)
-
-        X_latestA =scalerA.transform(X_latestA)
-        X_latestA = X_latestA.reshape(1, X_latestA.shape[1], 1)
-
-        prediction_probs = modelA.predict(X_latestA)
-        predictionA = np.argmax(prediction_probs, axis=-1)[0]
-        confidence = prediction_probs[0][predictionA]
-
-        if confidence < 0.7:
-            print(f"Prediction confidence ({confidence:.2f}) is below the threshold. No trade will be placed.")
-            continue
-        print(f"Predicted action: {predictionA}")
-
-        if predictionA == 1:  # Buy
-            entry_price = df['close'].iloc[-1]  # Use the ask price for a buy trade
-            stop_loss = entry_price - 3.00
-            take_profit = entry_price + 3.00
-            lotSize = 0.01
-            order_id = place_buy_trade(symbol, entry_price, stop_loss, take_profit, lotSize)
-            if order_id:
-                print(f"Buy trade placed: Order ID = {order_id}")
-
-        elif predictionA == 2:  # Sell
-            entry_price = df['close'].iloc[-1]  # Use the bid price for a sell trade
-            stop_loss = entry_price + 3.00
-            take_profit = entry_price - 3.00
-            lotSize = 0.01
-            order_id = place_sell_trade(symbol, entry_price, stop_loss, take_profit, lotSize)
-            if order_id:
-                print(f"Sell trade placed: Order ID = {order_id}")
-
-        # If no trade was placed, wait for 15 minutes
-        if order_id is None:
-            print("No favorable trading condition. Waiting for 30 minutes...")
-            time.sleep(900)  # Sleep for 15 minutes
-            continue  # Go back to the start of the loop
-
-        # Wait for the trade to end
-        if order_id:
-            while True:
-                # Check if the trade has ended
-                if not has_active_trade(symbol):
-                    print(f"Trade with Order ID {order_id} has ended.")
-                    wait_for_next_execution()
-                    break  # Exit the inner loop if all trades have ended
-                time.sleep(60)  # Check every 60 seconds for price updates
-
-if __name__ == "__main__":
-    if not mt5.initialize(login=100003703, server="FBS-Demo", password="jV9}8d,)"):
-        print("Failed to initialize MetaTrader5")
-        mt5.shutdown()
-        quit()
-
-    main_trading_loop()
-    mt5.shutdown()
