@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MT5 Demo Account Scraper</title>
+    <script>
+        function notifyUser(message) {
+            if (Notification.permission === "granted") {
+                new Notification(message);
+            } else if (Notification.permission !== "denied") {
+                Notification.requestPermission().then(permission => {
+                    if (permission === "granted") {
+                        new Notification(message);
+                    }
+                });
+            }
+        }
+
+        // Example of sending a notification when a trade signal is detected
+        function checkTradeSignal() {
+            // Logic to call Flask API and check for trade signals
+            fetch('/trade_signal')
+            .then(response => response.json())
+            .then(data => {
+                if (data.signal) {
+                    notifyUser("Trade Signal: " + data.message);
+                }
+            });
+        }
+
+        setInterval(checkTradeSignal, 60000);  // Check for trade signals every minute
+    </script>
+</head>
+<body>
+    <h1>MT5 Demo Account Scraper</h1>
+    <p>Monitoring trends and signaling trades...</p>
+</body>
+</html>

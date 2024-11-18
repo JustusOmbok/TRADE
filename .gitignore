@@ -1,0 +1,18 @@
+# Ignore environment files
+.env
+.env.*
+myenv/
+
+# Ignore files starting with 'test'
+test*
+
+# Ignore  __pycache__ directory
+__pycache__
+*.pylance
+
+# Ignore template directory
+template
+
+# Ignore .vscode directory
+.vscode
+
