@@ -10,8 +10,7 @@ from gold_script import TradingBot
 # Main trading function
 def main_trading_loop():
     symbol = "XAUUSD"
-    timeframe = mt5.TIMEFRAME_M15
-    bot = TradingBot(symbol='XAUUSD', timeframe=mt5.TIMEFRAME_M15)
+    bot = TradingBot(symbol='XAUUSD', timeframe=mt5.TIMEFRAME_M15, num_bars=500)
     modelA, scalerA = bot.load_modelA_and_scalerA()
 
     while True:
@@ -22,7 +21,7 @@ def main_trading_loop():
             time.sleep(900)  # Sleep for 15 minutes
             continue
         bot.wait_for_next_execution()
-        df = bot.fetch_latest_data(symbol, timeframe, 500)
+        df = bot.fetch_latest_data()
         df = bot.create_features(df)
         df.set_index('time', inplace=True)
         X_latestA = df.drop(columns=['tick_volume', 'real_volume', 'volume', 'spread', 'high', 'open', 'close', 'low']).select_dtypes(include=[np.number]).values[-1].reshape(1, -1)
@@ -36,6 +35,7 @@ def main_trading_loop():
 
         if confidence < 0.7:
             print(f"Prediction confidence ({confidence:.2f}) is below the threshold. No trade will be placed.")
+            time.sleep(900)  # Sleep for 15 minutes
             continue
         print(f"Predicted action: {predictionA}")
 

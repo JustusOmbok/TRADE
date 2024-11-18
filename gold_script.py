@@ -8,7 +8,7 @@ import pickle
 import datetime
 
 class TradingBot:
-    def __init__(self, symbol, timeframe, num_bars=500):
+    def __init__(self, symbol, timeframe, num_bars):
         self.symbol = symbol
         self.timeframe = timeframe
         self.num_bars = num_bars
@@ -102,7 +102,7 @@ class TradingBot:
             now = datetime.datetime.now()
             minute = now.minute
             second = now.second
-            if (8 <= now.hour < 19) and (minute in [0, 15, 30, 45]) and (second in range(21)):
+            if (8 <= now.hour < 19) and (minute in [0, 15, 30, 45, 53, 54, 55]) and (second in range(21)):
                 print(f"Starting the next trading cycle at {now.strftime('%H:%M:%S')} UTC")
                 break
             else:
