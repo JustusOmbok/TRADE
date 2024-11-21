@@ -35,6 +35,8 @@ def fetch_data(symbol, timeframe, start, end):
 # Main feature creation function with all updates
 def create_features(df):
     # Existing indicators
+    df['sma_100'] = df['close'].rolling(window=100).mean()
+    df['sma_200'] = df['close'].rolling(window=200).mean()
     df['RSI'] = compute_rsi(df['close'], window=14)
     df['ATR'] = compute_atr(df['high'], df['low'], df['close'], window=14)
     df['rolling_std'] = df['close'].rolling(window=20).std()

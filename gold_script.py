@@ -31,6 +31,8 @@ class TradingBot:
         return df
 
     def create_features(self, df):
+        df['sma_100'] = df['close'].rolling(window=100).mean()
+        df['sma_200'] = df['close'].rolling(window=200).mean()
         df['RSI'] = compute_rsi(df['close'], window=14)
         df['ATR'] = compute_atr(df['high'], df['low'], df['close'], window=14)
         df['rolling_std'] = df['close'].rolling(window=20).std()
@@ -109,7 +111,7 @@ class TradingBot:
             now = datetime.datetime.now()
             minute = now.minute
             second = now.second
-            if (8 <= now.hour < 19) and (minute in [0, 15, 30, 45, 53, 54, 55]) and (second in range(21)):
+            if (1 <= now.hour < 20) and (minute in [0, 15, 30, 45]) and (second in range(10)):
                 print(f"Starting the next trading cycle at {now.strftime('%H:%M:%S')} UTC")
                 break
             else:
