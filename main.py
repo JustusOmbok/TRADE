@@ -33,7 +33,7 @@ def main_trading_loop():
         predictionA = np.argmax(prediction_probs, axis=-1)[0]
         confidence = prediction_probs[0][predictionA]
 
-        if confidence < 0.7:
+        if confidence < 0.70:
             print(f"Prediction confidence ({confidence:.2f}) is below the threshold. No trade will be placed.")
             time.sleep(900)  # Sleep for 15 minutes
             continue
@@ -41,8 +41,8 @@ def main_trading_loop():
 
         if predictionA == 1:  # Buy
             entry_price = df['close'].iloc[-1]  # Use the ask price for a buy trade
-            stop_loss = entry_price - 3.00
-            take_profit = entry_price + 3.00
+            stop_loss = entry_price - 7.00
+            take_profit = entry_price + 7.00
             lotSize = 0.01
             order_id = bot.place_buy_trade(symbol, entry_price, stop_loss, take_profit, lotSize)
             if order_id:
@@ -50,8 +50,8 @@ def main_trading_loop():
 
         elif predictionA == 2:  # Sell
             entry_price = df['close'].iloc[-1]  # Use the bid price for a sell trade
-            stop_loss = entry_price + 3.00
-            take_profit = entry_price - 3.00
+            stop_loss = entry_price + 7.00
+            take_profit = entry_price - 7.00
             lotSize = 0.01
             order_id = bot.place_sell_trade(symbol, entry_price, stop_loss, take_profit, lotSize)
             if order_id:
